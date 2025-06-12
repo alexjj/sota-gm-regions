@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import pandas as pd
 import pydeck as pdk
@@ -15,6 +16,13 @@ def load_data():
     return df
 
 df = load_data()
+
+def extract_sota_region(sota_ref):
+    # Extract the two letters after the slash, e.g. GM/SS-001 → SS
+    match = re.search(r"/([A-Z]{2})-", sota_ref)
+    return match.group(1) if match else ""
+
+df['Original SOTA region'] = df['SOTA Ref'].apply(extract_sota_region)
 
 # Sidebar – Region assignment
 st.sidebar.header("Region Reassignment")
@@ -60,63 +68,37 @@ st.title("Scottish SOTA Summit Reassignment Explorer")
 # Dual maps
 map_col1, map_col2 = st.columns(2)
 
-with map_col1:
-    st.subheader(f"New coloured by {colour_by}")
-    st.pydeck_chart(pdk.Deck(
-        map_style="mapbox://styles/mapbox/light-v11",
-        initial_view_state=pdk.ViewState(
-            latitude=df['Latitude'].mean(),
-            longitude=df['Longitude'].mean(),
-            zoom=6.2,
-            pitch=0,
-        ),
-        layers=[
-            pdk.Layer(
-    "ScatterplotLayer",
-    data=df,
-    get_position='[Longitude, Latitude]',
-    get_fill_color='Color',  # or 'Original Color'
-    get_radius=1000,
-    pickable=True,
-    stroked=True,
-    get_line_color=[0, 0, 0],
-    line_width_min_pixels=1,
-    opacity=0.9,
-)
-        ],
+st.pydeck_chart(pdk.Deck(
+    map_style="mapbox://styles/mapbox/outdoors-v12",
+    initial_view_state=pdk.ViewState(
+        latitude=df['Latitude'].mean(),
+        longitude=df['Longitude'].mean(),
+        zoom=6.2,
+        pitch=0,
+    ),
+    layers=[
+        pdk.Layer(
+            "ScatterplotLayer",
+            data=df,
+            get_position='[Longitude, Latitude]',
+            get_fill_color='Color',
+            get_radius=1000,
+            pickable=True,
+            stroked=True,
+            get_line_color=[0, 0, 0],
+            line_width_min_pixels=1,
+            opacity=0.9,
+        )
+    ],
     tooltip={
-        "html": "<b>{Hill name}</b><br/>"
-                "Area: {Area}<br/>"
-                "New gm region: {Assigned Region}"
+        "html": (
+            "<b>{Hill name}</b><br/>"
+            "Area: {Area}<br/>"
+            "New gm region: {Assigned Region}<br/>"
+            "Original SOTA region: {Original SOTA region}"
+        )
     }
-    ))
-
-with map_col2:
-    st.subheader("Original SOTA Regions")
-    st.pydeck_chart(pdk.Deck(
-        map_style="mapbox://styles/mapbox/light-v11",
-        initial_view_state=pdk.ViewState(
-            latitude=df['Latitude'].mean(),
-            longitude=df['Longitude'].mean(),
-            zoom=6.2,
-            pitch=0,
-        ),
-        layers=[
-            pdk.Layer(
-    "ScatterplotLayer",
-    data=df,
-    get_position='[Longitude, Latitude]',
-    get_fill_color='Color',  # or 'Original Color'
-    get_radius=1000,
-    pickable=True,
-    stroked=True,
-    get_line_color=[0, 0, 0],
-    line_width_min_pixels=1,
-    opacity=0.9,
-)
-        ],
-        tooltip={"text": "{Hill name}\nOriginal: {Original Region}"}
-    ))
+))
 
 # Comparison bar chart
 st.subheader("📊 Region Assignment Comparison")
