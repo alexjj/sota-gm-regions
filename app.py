@@ -1,0 +1,150 @@
+import streamlit as st
+import pandas as pd
+import pydeck as pdk
+import plotly.express as px
+import matplotlib.pyplot as plt
+
+st.set_page_config(layout="wide", page_title="Scottish SOTA Summit Explorer")
+
+
+# Load data
+@st.cache_data
+def load_data():
+    df = pd.read_excel("rhb-gm-summits.xlsx", sheet_name="byregion")
+    df['Original Region'] = df['SOTA Ref'].str.extract(r'GM/([A-Z]+)-')
+    return df
+
+df = load_data()
+
+# Sidebar – Region assignment
+st.sidebar.header("Region Reassignment")
+colour_by = st.sidebar.selectbox("Colour markers by:", ["Area", "New gm region"])
+
+# Region assignment by Area
+sota_regions = ['SS', 'ES', 'CS', 'SI', 'WS', 'NS']
+area_list = sorted(df['Area'].dropna().unique())
+area_to_region = {}
+
+st.sidebar.markdown("### Assign SOTA region to each Area:")
+# Create a mapping from Area code to Area name
+area_name_map = df.set_index('Area')['Area name'].to_dict()
+
+for area in area_list:
+    area_name = area_name_map.get(area, area)  # fallback to code if name missing
+    default = df[df['Area'] == area]['New gm region'].mode()
+    default_value = default.iat[0] if not default.empty and default.iat[0] in sota_regions else 'SS'
+    label = f"{area_name} ({area})"
+    region = st.sidebar.selectbox(label, sota_regions, index=sota_regions.index(default_value), key=area)
+    area_to_region[area] = region
+
+# Apply region assignments
+df['Assigned Region'] = df['Area'].map(area_to_region)
+
+# Colour mapping (shared for both maps)
+def make_color_map(values):
+    unique = sorted(values.dropna().unique())
+    cmap = plt.get_cmap("Set1", len(unique))
+    return {val: [int(c * 255) for c in cmap(i)[:3]] for i, val in enumerate(unique)}
+
+# Compute shared colour map
+combined_categories = pd.concat([df['Original Region'], df['Assigned Region'], df[colour_by]]).dropna().unique()
+color_map = make_color_map(pd.Series(combined_categories))
+
+# Assign RGB colors to each row
+df['Color'] = df[colour_by].map(color_map)
+df['Original Color'] = df['Original Region'].map(color_map)
+
+# Page title
+st.title("Scottish SOTA Summit Reassignment Explorer")
+
+# Dual maps
+map_col1, map_col2 = st.columns(2)
+
+with map_col1:
+    st.subheader(f"New coloured by {colour_by}")
+    st.pydeck_chart(pdk.Deck(
+        map_style="mapbox://styles/mapbox/light-v11",
+        initial_view_state=pdk.ViewState(
+            latitude=df['Latitude'].mean(),
+            longitude=df['Longitude'].mean(),
+            zoom=6.2,
+            pitch=0,
+        ),
+        layers=[
+            pdk.Layer(
+    "ScatterplotLayer",
+    data=df,
+    get_position='[Longitude, Latitude]',
+    get_fill_color='Color',  # or 'Original Color'
+    get_radius=1000,
+    pickable=True,
+    stroked=True,
+    get_line_color=[0, 0, 0],
+    line_width_min_pixels=1,
+    opacity=0.9,
+)
+        ],
+    tooltip={
+        "html": "<b>{Hill name}</b><br/>"
+                "Area: {Area}<br/>"
+                "New gm region: {Assigned Region}"
+    }
+    ))
+
+with map_col2:
+    st.subheader("Original SOTA Regions")
+    st.pydeck_chart(pdk.Deck(
+        map_style="mapbox://styles/mapbox/light-v11",
+        initial_view_state=pdk.ViewState(
+            latitude=df['Latitude'].mean(),
+            longitude=df['Longitude'].mean(),
+            zoom=6.2,
+            pitch=0,
+        ),
+        layers=[
+            pdk.Layer(
+    "ScatterplotLayer",
+    data=df,
+    get_position='[Longitude, Latitude]',
+    get_fill_color='Color',  # or 'Original Color'
+    get_radius=1000,
+    pickable=True,
+    stroked=True,
+    get_line_color=[0, 0, 0],
+    line_width_min_pixels=1,
+    opacity=0.9,
+)
+        ],
+        tooltip={"text": "{Hill name}\nOriginal: {Original Region}"}
+    ))
+
+# Comparison bar chart
+st.subheader("📊 Region Assignment Comparison")
+
+original_counts = df['Original Region'].value_counts().rename("Original")
+assigned_counts = df['Assigned Region'].value_counts().rename("New")
+comparison_df = pd.concat([original_counts, assigned_counts], axis=1).fillna(0).astype(int)
+st.dataframe(comparison_df)
+
+fig = px.bar(
+    comparison_df.reset_index().melt(id_vars='index'),
+    x='index',
+    y='value',
+    color='variable',
+    labels={'index': 'Region', 'value': 'Summit Count'},
+    barmode='group',
+    title="Summit Counts by Region: Original vs Assigned"
+)
+st.plotly_chart(fig)
+
+# Update the New gm region column based on sidebar selections
+df['New gm region'] = df['Area'].map(area_to_region)
+
+# Download button
+csv = df.to_csv(index=False)
+st.download_button(
+    label="Download updated regions CSV",
+    data=csv,
+    file_name="rhb-gm-summits-updated.csv",
+    mime="text/csv",
+)
