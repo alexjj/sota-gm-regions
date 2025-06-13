@@ -171,6 +171,24 @@ plt.tight_layout()
 st.pyplot(fig)
 
 
+# Extract original region from SOTA Ref if not already done
+df["Original SOTA region"] = df["SOTA Ref"].str.extract(r"GM/([A-Z]{2})-")
 
+# Find summits where the region has changed
+changed = df[df["Original SOTA region"] != df["Assigned Region"]]
+
+# Optional: choose which columns to display
+columns_to_show = [
+    "SOTA Ref", "Hill name", "Area name",
+    "Original SOTA region", "Assigned Region"
+]
+
+# Reset index and make it start at 1
+changed_display = changed[columns_to_show].reset_index(drop=True)
+changed_display.index += 1  # Start from 1
+
+# Display
+st.markdown("### 🧾 Summits with Changed Regions")
+st.dataframe(changed_display, use_container_width=True)
 
 
