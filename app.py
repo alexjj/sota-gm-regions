@@ -4,6 +4,7 @@ import pandas as pd
 import pydeck as pdk
 import plotly.express as px
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 st.set_page_config(layout="wide", page_title="Scottish SOTA Summit Explorer")
 
@@ -23,6 +24,7 @@ def extract_sota_region(sota_ref):
     return match.group(1) if match else ""
 
 df['Original SOTA region'] = df['SOTA Ref'].apply(extract_sota_region)
+
 
 # Sidebar – Region assignment
 st.sidebar.header("Region Reassignment")
@@ -130,3 +132,45 @@ st.download_button(
     file_name="rhb-gm-summits-updated.csv",
     mime="text/csv",
 )
+
+# Recalculate if needed
+original = df.groupby(['Original SOTA region', 'Points']).size().unstack(fill_value=0)
+new = df.groupby(['New gm region', 'Points']).size().unstack(fill_value=0)
+
+original.index = [f"{r} (original)" for r in original.index]
+new.index = [f"{r} (new)" for r in new.index]
+
+# Combine
+combined = pd.concat([original, new])
+
+# Build desired order: interleave original and new
+regions = sorted(set(df['Original SOTA region'].dropna()))
+ordered_index = []
+for r in regions:
+    if f"{r} (original)" in combined.index:
+        ordered_index.append(f"{r} (original)")
+    if f"{r} (new)" in combined.index:
+        ordered_index.append(f"{r} (new)")
+
+# Normalize to proportions
+percent_df = combined.loc[ordered_index].div(combined.loc[ordered_index].sum(axis=1), axis=0)
+
+# Plot
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(12, 6))
+percent_df.plot(kind='bar', stacked=True, ax=ax, colormap='tab10')
+
+ax.set_title("Proportional Summit Distribution by Region (Original vs New)")
+ax.set_ylabel("Proportion")
+ax.set_xlabel("Region")
+ax.legend(title='Points', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+st.pyplot(fig)
+
+
+
+
+
