@@ -4,7 +4,9 @@ import pandas as pd
 import pydeck as pdk
 import plotly.express as px
 import matplotlib.pyplot as plt
-import seaborn as sns
+from shapely.geometry import MultiPoint, Point
+import shapely
+import numpy as np
 
 st.set_page_config(layout="wide", page_title="Scottish SOTA Summit Explorer")
 
@@ -101,6 +103,82 @@ deck = pdk.Deck(
 
 # Height is set here
 st.pydeck_chart(deck, use_container_width=True, height=900)
+
+# shape map
+
+region_polygons = []
+region_labels = []
+
+# Unique regions
+for region, group in df.groupby("Assigned Region"):
+    points = group[["Longitude", "Latitude"]].dropna().values
+
+    # Skip if not enough points to form a polygon
+    if len(points) < 3:
+        continue
+
+    # Create convex hull polygon
+    hull = MultiPoint(points).convex_hull
+
+    # Extract coordinates for pydeck polygon format
+    coords = np.array(hull.exterior.coords)
+    polygon_coords = [[list(coord) + [0] for coord in coords]]  # pydeck needs [lng, lat, elevation]
+
+    # Add polygon layer
+    region_polygons.append({
+        "coordinates": polygon_coords,
+        "region": region
+    })
+
+    # Add label at centroid
+    centroid = hull.centroid
+    region_labels.append({
+        "coordinates": [centroid.x, centroid.y],
+        "region": region
+    })
+
+# Pydeck layers
+polygon_layer = pdk.Layer(
+    "PolygonLayer",
+    data=region_polygons,
+    get_polygon="coordinates",
+    get_fill_color='[255, 100, 100, 100]',  # semi-transparent red, or customise
+    get_line_color='[0, 0, 0]',
+    line_width_min_pixels=1,
+    pickable=True,
+    stroked=True,
+)
+
+text_layer = pdk.Layer(
+    "TextLayer",
+    data=region_labels,
+    get_position="coordinates",
+    get_text="region",
+    get_size=16,
+    get_color=[0, 0, 0],
+    get_angle=0,
+    get_alignment_baseline="'bottom'"
+)
+
+# View state
+view_state = pdk.ViewState(
+    latitude=df["Latitude"].mean(),
+    longitude=df["Longitude"].mean(),
+    zoom=6.2,
+    pitch=0
+)
+
+st.subheader("🗺️ New Region Coverage")
+
+# Display map
+st.pydeck_chart(pdk.Deck(
+    layers=[polygon_layer, text_layer],
+    initial_view_state=view_state,
+    map_style="mapbox://styles/mapbox/outdoors-v12"
+), use_container_width=True, height=700)
+
+
+
 
 # Comparison bar chart
 st.subheader("📊 Region Assignment Comparison")
