@@ -168,7 +168,7 @@ view_state = pdk.ViewState(
     pitch=0
 )
 
-st.subheader("🗺️ New Region Coverage")
+st.subheader("🗺️ NewRegion Coverage")
 
 # Display map
 st.pydeck_chart(pdk.Deck(
