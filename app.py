@@ -67,10 +67,7 @@ df['Original Color'] = df['Original Region'].map(color_map)
 # Page title
 st.title("Scottish SOTA Summit Reassignment Explorer")
 
-# Dual maps
-map_col1, map_col2 = st.columns(2)
-
-st.pydeck_chart(pdk.Deck(
+deck = pdk.Deck(
     map_style="mapbox://styles/mapbox/outdoors-v12",
     initial_view_state=pdk.ViewState(
         latitude=df['Latitude'].mean(),
@@ -100,7 +97,10 @@ st.pydeck_chart(pdk.Deck(
             "Original SOTA region: {Original SOTA region}"
         )
     }
-))
+)
+
+# Height is set here
+st.pydeck_chart(deck, use_container_width=True, height=900)
 
 # Comparison bar chart
 st.subheader("📊 Region Assignment Comparison")
